@@ -272,7 +272,14 @@ async function buildContainerArgs(
 
   // Forward proxy env vars so agent containers can route through the sandbox proxy.
   // DinD containers have no transparent proxy access — they need explicit config.
-  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']) {
+  for (const key of [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+  ]) {
     if (process.env[key]) args.push('-e', `${key}=${process.env[key]}`);
   }
 
@@ -283,7 +290,8 @@ async function buildContainerArgs(
   }
 
   // Mount the proxy CA certificate so agent containers trust the MITM proxy.
-  const caCertSrc = process.env.NODE_EXTRA_CA_CERTS || process.env.SSL_CERT_FILE;
+  const caCertSrc =
+    process.env.NODE_EXTRA_CA_CERTS || process.env.SSL_CERT_FILE;
   if (caCertSrc && fs.existsSync(caCertSrc)) {
     const certDir = path.join(DATA_DIR, 'ca-cert');
     fs.mkdirSync(certDir, { recursive: true });
