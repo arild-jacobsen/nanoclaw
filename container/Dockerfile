@@ -3,6 +3,14 @@
 
 FROM node:22-slim
 
+# Accept proxy build args (needed for Docker Sandbox MITM proxy)
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+ARG NODE_EXTRA_CA_CERTS
+ARG npm_config_strict_ssl=true
+RUN npm config set strict-ssl ${npm_config_strict_ssl}
+
 # Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
@@ -41,6 +49,7 @@ COPY agent-runner/package*.json ./
 
 # Install dependencies
 RUN npm install
+RUN npm config set strict-ssl true
 
 # Copy source code
 COPY agent-runner/ ./

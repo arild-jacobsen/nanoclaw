@@ -99,11 +99,20 @@ export async function run(args: string[]): Promise<void> {
     runtime === 'apple-container' ? 'container build' : 'docker build';
   const runCmd = runtime === 'apple-container' ? 'container' : 'docker';
 
+  // Proxy build args for Docker Sandbox (MITM proxy requires SSL bypass during build)
+  const proxyArgs = [
+    `--build-arg http_proxy="${process.env.http_proxy || process.env.HTTP_PROXY || ''}"`,
+    `--build-arg https_proxy="${process.env.https_proxy || process.env.HTTPS_PROXY || ''}"`,
+    `--build-arg no_proxy="${process.env.no_proxy || process.env.NO_PROXY || ''}"`,
+    `--build-arg NODE_EXTRA_CA_CERTS="${process.env.NODE_EXTRA_CA_CERTS || ''}"`,
+    `--build-arg npm_config_strict_ssl=false`,
+  ].join(' ');
+
   // Build
   let buildOk = false;
   logger.info({ runtime }, 'Building container');
   try {
-    execSync(`${buildCmd} -t ${image} .`, {
+    execSync(`${buildCmd} ${proxyArgs} -t ${image} .`, {
       cwd: path.join(projectRoot, 'container'),
       stdio: ['ignore', 'pipe', 'pipe'],
     });

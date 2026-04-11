@@ -13,7 +13,13 @@ CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 echo "Building NanoClaw agent container image..."
 echo "Image: ${IMAGE_NAME}:${TAG}"
 
-${CONTAINER_RUNTIME} build -t "${IMAGE_NAME}:${TAG}" .
+${CONTAINER_RUNTIME} build \
+  --build-arg http_proxy="${http_proxy:-$HTTP_PROXY}" \
+  --build-arg https_proxy="${https_proxy:-$HTTPS_PROXY}" \
+  --build-arg no_proxy="${no_proxy:-$NO_PROXY}" \
+  --build-arg NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS}" \
+  --build-arg npm_config_strict_ssl=false \
+  -t "${IMAGE_NAME}:${TAG}" .
 
 echo ""
 echo "Build complete!"

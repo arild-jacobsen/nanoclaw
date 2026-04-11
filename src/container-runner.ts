@@ -80,10 +80,13 @@ function buildVolumeMounts(
 
     // Shadow .env so the agent cannot read secrets from the mounted project root.
     // Credentials are injected by the OneCLI gateway, never exposed to containers.
+    // Use an empty file instead of /dev/null (Docker Sandbox rejects /dev/null mounts).
     const envFile = path.join(projectRoot, '.env');
     if (fs.existsSync(envFile)) {
+      const emptyEnvPath = path.join(DATA_DIR, 'empty-env');
+      if (!fs.existsSync(emptyEnvPath)) fs.writeFileSync(emptyEnvPath, '');
       mounts.push({
-        hostPath: '/dev/null',
+        hostPath: emptyEnvPath,
         containerPath: '/workspace/project/.env',
         readonly: true,
       });
@@ -265,6 +268,29 @@ async function buildContainerArgs(
       { containerName },
       'OneCLI gateway not reachable — container will have no credentials',
     );
+  }
+
+  // Forward proxy env vars so agent containers can route through the sandbox proxy.
+  // DinD containers have no transparent proxy access — they need explicit config.
+  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']) {
+    if (process.env[key]) args.push('-e', `${key}=${process.env[key]}`);
+  }
+
+  // When OneCLI is unavailable but we're behind a proxy (e.g. Docker Sandbox),
+  // set a placeholder API key. The sandbox proxy replaces it with the real key.
+  if (!onecliApplied && process.env.HTTPS_PROXY) {
+    args.push('-e', 'ANTHROPIC_API_KEY=proxy-managed');
+  }
+
+  // Mount the proxy CA certificate so agent containers trust the MITM proxy.
+  const caCertSrc = process.env.NODE_EXTRA_CA_CERTS || process.env.SSL_CERT_FILE;
+  if (caCertSrc && fs.existsSync(caCertSrc)) {
+    const certDir = path.join(DATA_DIR, 'ca-cert');
+    fs.mkdirSync(certDir, { recursive: true });
+    const certDest = path.join(certDir, 'proxy-ca.crt');
+    fs.copyFileSync(caCertSrc, certDest);
+    args.push('-v', `${certDir}:/workspace/ca-cert:ro`);
+    args.push('-e', 'NODE_EXTRA_CA_CERTS=/workspace/ca-cert/proxy-ca.crt');
   }
 
   // Runtime-specific args for host gateway resolution
