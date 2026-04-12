@@ -1,0 +1,63 @@
+name: Fix Vulnerabilities
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  fix-vulnerabilities:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check for vulnerabilities
+        id: audit
+        run: |
+          COUNT=$(npm audit --json 2>/dev/null \
+            | jq '[.vulnerabilities // {} | to_entries[].value.severity] | map(select(. == "high" or . == "critical")) | length')
+          echo "high_or_critical=${COUNT}" >> $GITHUB_OUTPUT
+          echo "Found ${COUNT} high/critical vulnerabilities"
+
+      - name: Check for existing fix PR
+        id: existing_pr
+        if: steps.audit.outputs.high_or_critical != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh pr list --state open --label "security" --json number --jq length)
+          echo "open_security_prs=${COUNT}" >> $GITHUB_OUTPUT
+
+      - name: Fix vulnerabilities with Claude
+        if: steps.audit.outputs.high_or_critical != '0' && steps.existing_pr.outputs.open_security_prs == '0'
+        uses: anthropics/claude-code-action@beta
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          allowed_tools: "Bash"
+          prompt: |
+            This repository has high or critical npm vulnerabilities. Fix them.
+
+            Steps:
+            1. Run `npm audit` to see what's affected.
+            2. Run `npm audit fix` to apply safe fixes. If some remain, manually
+               update the specific packages in package.json to patched versions.
+            3. Run `npm audit` again — aim to eliminate all high/critical issues.
+               Moderate/low can remain if they have no fix available yet.
+            4. Run `npx tsc --noEmit` and `npx vitest run` to verify nothing broke.
+            5. Create a branch named `fix/npm-vulnerabilities-$(date +%Y%m%d)`,
+               commit the changes with message "fix(deps): address npm audit vulnerabilities",
+               and open a pull request with label "security" using `gh pr create`.
+               Title: "fix(deps): address npm audit vulnerabilities"
+               Body: include the before/after `npm audit` summary.
