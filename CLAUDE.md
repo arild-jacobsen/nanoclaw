@@ -53,10 +53,14 @@ Before creating a PR, adding a skill, or preparing any contribution, you MUST re
 Run commands directly—don't tell the user to run them.
 
 ```bash
-npm run dev          # Run with hot reload
+./start.sh           # Start NanoClaw (prompts for dev/prod mode)
+./start.sh dev       # Hot reload via npm run dev
+./start.sh prod      # Compiled via node dist/index.js
 npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
+
+`start.sh` also ensures OneCLI is running before starting NanoClaw. Use it as the single entry point in sandbox environments.
 
 Service management:
 ```bash
