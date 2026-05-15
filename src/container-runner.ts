@@ -270,35 +270,43 @@ async function buildContainerArgs(
     );
   }
 
-  // Forward proxy env vars so agent containers can route through the sandbox proxy.
-  // DinD containers have no transparent proxy access — they need explicit config.
-  for (const key of [
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'NO_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'no_proxy',
-  ]) {
-    if (process.env[key]) args.push('-e', `${key}=${process.env[key]}`);
-  }
+  // Forward the sandbox proxy + its CA ONLY when OneCLI is not handling
+  // credentials. When OneCLI is applied, its gateway is the sole proxy:
+  // forwarding the sandbox proxy here would override OneCLI's env vars
+  // (Docker keeps the last -e for a duplicate key) and silently bypass
+  // OneCLI's credential injection entirely.
+  if (!onecliApplied) {
+    // Forward proxy env vars so agent containers can route through the sandbox
+    // proxy. DinD containers have no transparent proxy access — they need
+    // explicit config.
+    for (const key of [
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'no_proxy',
+    ]) {
+      if (process.env[key]) args.push('-e', `${key}=${process.env[key]}`);
+    }
 
-  // When OneCLI is unavailable but we're behind a proxy (e.g. Docker Sandbox),
-  // set a placeholder API key. The sandbox proxy replaces it with the real key.
-  if (!onecliApplied && process.env.HTTPS_PROXY) {
-    args.push('-e', 'ANTHROPIC_API_KEY=proxy-managed');
-  }
+    // Behind a proxy (e.g. Docker Sandbox) with no OneCLI: set a placeholder
+    // API key. The sandbox proxy replaces it with the real key.
+    if (process.env.HTTPS_PROXY) {
+      args.push('-e', 'ANTHROPIC_API_KEY=proxy-managed');
+    }
 
-  // Mount the proxy CA certificate so agent containers trust the MITM proxy.
-  const caCertSrc =
-    process.env.NODE_EXTRA_CA_CERTS || process.env.SSL_CERT_FILE;
-  if (caCertSrc && fs.existsSync(caCertSrc)) {
-    const certDir = path.join(DATA_DIR, 'ca-cert');
-    fs.mkdirSync(certDir, { recursive: true });
-    const certDest = path.join(certDir, 'proxy-ca.crt');
-    fs.copyFileSync(caCertSrc, certDest);
-    args.push('-v', `${certDir}:/workspace/ca-cert:ro`);
-    args.push('-e', 'NODE_EXTRA_CA_CERTS=/workspace/ca-cert/proxy-ca.crt');
+    // Mount the proxy CA certificate so agent containers trust the MITM proxy.
+    const caCertSrc =
+      process.env.NODE_EXTRA_CA_CERTS || process.env.SSL_CERT_FILE;
+    if (caCertSrc && fs.existsSync(caCertSrc)) {
+      const certDir = path.join(DATA_DIR, 'ca-cert');
+      fs.mkdirSync(certDir, { recursive: true });
+      const certDest = path.join(certDir, 'proxy-ca.crt');
+      fs.copyFileSync(caCertSrc, certDest);
+      args.push('-v', `${certDir}:/workspace/ca-cert:ro`);
+      args.push('-e', 'NODE_EXTRA_CA_CERTS=/workspace/ca-cert/proxy-ca.crt');
+    }
   }
 
   // Runtime-specific args for host gateway resolution
