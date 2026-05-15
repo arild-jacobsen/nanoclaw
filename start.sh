@@ -50,7 +50,7 @@ start_onecli() {
 
   echo -n "Waiting for OneCLI health check"
   local attempts=0
-  until curl -sf http://127.0.0.1:10254/health >/dev/null 2>&1; do
+  until curl -sf http://127.0.0.1:10254/api/health >/dev/null 2>&1; do
     sleep 1
     attempts=$((attempts + 1))
     echo -n "."
